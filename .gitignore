@@ -1,0 +1,19 @@
+# Go build output
+/tapview
+/dist/
+
+# Captured traffic + decoded session dumps contain real account data — never commit
+*.tap
+/session*.json
+/out*.json
+testdata/
+
+# Node / Expo
+app/node_modules/
+app/.expo/
+app/dist/
+app/web-build/
+npm-debug.*
+
+# macOS
+.DS_Store
