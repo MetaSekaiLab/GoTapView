@@ -9,16 +9,26 @@ export function summarize(e: TapEvent): string {
     return `${h.method} ${trimPath(h.path)}${status}${note}`;
   }
   if (e.udp) {
-    const d = e.udp.data;
     const dir = e.udp.dir === "c2s" ? "C→S" : "S→C";
+    if (e.udp.other) return `${dir} non-Diarkis UDP (${e.udp.other.bytes}B)`;
+    const d = e.udp.data;
+    if (!d) return `${dir} ?`;
+
+    // a fragment still waiting for the rest of its set
+    if (d.split && !d.split.complete) {
+      return `${dir} ${d.flag} split ${d.split.index + 1}/${d.split.count} (${d.split.bytes}B)`;
+    }
     if (!d.frame) {
       const raw = d.raw ? ` (${d.raw.length / 2}B)` : "";
       return `${dir} ${d.flag}${raw}`;
     }
     const f = d.frame;
-    let msg = `${dir} ${d.flag} ver${f.ver} cmd${f.cmd}`;
+    const asm = d.split?.complete ? ` reassembled ${d.split.count}×` : "";
+    let msg = `${dir} ${d.flag}${asm} ver${f.ver} cmd${f.cmd}`;
     const bc = broadcastLabel(f.decoded);
+    const kind = kindLabel(f.decoded);
     if (bc) msg += `  ${bc}`;
+    else if (kind) msg += `  ${kind}`;
     else if (!f.recognized) msg += "  (raw)";
     return msg;
   }
@@ -30,6 +40,16 @@ function broadcastLabel(decoded: unknown): string | null {
   if (!obj) return null;
   const t = obj.msgType ?? (obj.msgId !== undefined ? `msg${obj.msgId}` : null);
   return t ? String(t) : null;
+}
+
+// kindLabel surfaces the decoder's own label for non-broadcast payloads
+// (clientKey, migrate, roomJoined, echo…).
+function kindLabel(decoded: unknown): string | null {
+  if (decoded && typeof decoded === "object" && !Array.isArray(decoded)) {
+    const k = (decoded as any).kind;
+    if (typeof k === "string") return k;
+  }
+  return null;
 }
 
 function firstBroadcast(decoded: unknown): any | null {
@@ -51,8 +71,9 @@ export function searchText(e: TapEvent): string {
   const parts: string[] = [e.remote];
   if (e.http) parts.push(e.http.method, e.http.path, String(e.http.status), e.http.note ?? "");
   if (e.udp) {
-    parts.push(e.udp.dir, e.udp.data.flag);
-    const f = e.udp.data.frame;
+    if (e.udp.other) parts.push("non-diarkis");
+    parts.push(e.udp.dir, e.udp.data?.flag ?? "");
+    const f = e.udp.data?.frame;
     if (f) {
       parts.push(`ver${f.ver}`, `cmd${f.cmd}`);
       const bc = firstBroadcast(f.decoded);

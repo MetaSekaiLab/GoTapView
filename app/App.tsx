@@ -162,7 +162,7 @@ function Row({ e, t0, onPress }: { e: TapEvent; t0: number; onPress: () => void 
   const isHttp = e.kind === "http";
   const dotColor = isHttp
     ? C.http
-    : e.udp?.data.frame
+    : e.udp?.data?.frame
       ? e.udp.dir === "c2s" ? C.udpC2S : C.udpS2C
       : C.ctrl;
   return (

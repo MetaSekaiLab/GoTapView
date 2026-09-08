@@ -39,10 +39,22 @@ type Datagram struct {
 	WrapSeq uint32 `json:"wrapSeq"`
 	Flag    string `json:"flag"`
 	IsRUDP  bool   `json:"isRudp"`
-	Frame   *Frame `json:"frame,omitempty"`
+	// Split describes a fragment of an oversized payload. When Frame is also
+	// set, this was the fragment that completed the payload.
+	Split *SplitInfo `json:"split,omitempty"`
+	Frame *Frame     `json:"frame,omitempty"`
 	// Raw holds the wrapper's body when it is not a Diarkis frame (control
 	// datagrams carry the bare sid; anything else is kept verbatim).
 	Raw string `json:"raw,omitempty"`
+}
+
+// SplitInfo reports a payload fragment's place in its set.
+type SplitInfo struct {
+	ID       uint16 `json:"id"`
+	Index    uint16 `json:"index"`
+	Count    uint16 `json:"count"`
+	Bytes    int    `json:"bytes"`
+	Complete bool   `json:"complete"`
 }
 
 // Frame is a decoded Diarkis frame header plus whatever of the payload we could
@@ -97,7 +109,10 @@ func SplitDatagrams(b []byte, respHeader bool) [][]byte {
 
 // Decode interprets one datagram, trying each candidate key for the secure
 // payload. dirS2C selects response framing and the no-sid inbound layout.
-func Decode(dg []byte, dirS2C bool, keys []Key) Datagram {
+//
+// ra may be nil. When provided, oversized payloads split across datagrams are
+// buffered and decoded once the final fragment arrives.
+func Decode(dg []byte, dirS2C bool, keys []Key, ra *Reassembler) Datagram {
 	var d Datagram
 	if len(dg) < 4 {
 		d.Raw = hex.EncodeToString(dg)
@@ -115,6 +130,28 @@ func Decode(dg []byte, dirS2C bool, keys []Key) Datagram {
 	if len(body) == 0 {
 		return d // bare control datagram
 	}
+
+	// An oversized payload arrives as fragments; buffer until it is whole.
+	if c, ok := ParseSplitChunk(body); ok {
+		info := &SplitInfo{ID: c.ID, Index: c.Index, Count: c.Count, Bytes: len(c.Data)}
+		d.Split = info
+		if ra == nil {
+			d.Raw = hex.EncodeToString(body)
+			return d
+		}
+		whole := ra.Feed(c)
+		if whole == nil {
+			return d // still incomplete; the fragment is reported on its own
+		}
+		info.Complete = true
+		info.Bytes = len(whole)
+		body = whole
+		if !hasMagic(body) {
+			d.Raw = hex.EncodeToString(body)
+			return d
+		}
+	}
+
 	if !hasMagic(body) {
 		d.Raw = hex.EncodeToString(body) // e.g. the sid on SYN/ACK/FIN
 		return d
@@ -141,6 +178,9 @@ func Decode(dg []byte, dirS2C bool, keys []Key) Datagram {
 	d.Frame = fr
 	return d
 }
+
+// HasFrameMagic reports whether a wrapper body begins a Diarkis frame.
+func HasFrameMagic(b []byte) bool { return hasMagic(b) }
 
 func hasMagic(b []byte) bool {
 	return len(b) >= 4 && b[0] == magic[0] && b[1] == magic[1] && b[2] == magic[2] && b[3] == magic[3]

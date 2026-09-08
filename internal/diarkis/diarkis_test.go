@@ -62,7 +62,7 @@ func TestDecodeSecureFrame(t *testing.T) {
 	k := testKey()
 	// a client-key transport frame (ver=0 cmd=4)
 	dg := seal(t, k, 0, 4, []byte("788aebb0-a457-4704"))
-	d := Decode(dg, false, []Key{k})
+	d := Decode(dg, false, []Key{k}, NewReassembler())
 	if d.Frame == nil || !d.Frame.Recognized {
 		t.Fatalf("frame not recognized: %+v", d)
 	}
@@ -80,7 +80,7 @@ func TestWrongKeyPreservesRaw(t *testing.T) {
 	dg := seal(t, k, 2, 3000, []byte("secret"))
 	other := testKey()
 	other.MacKey = []byte("DIFFERENTmackey!")
-	d := Decode(dg, false, []Key{other})
+	d := Decode(dg, false, []Key{other}, NewReassembler())
 	if d.Frame == nil {
 		t.Fatal("frame header should still parse")
 	}
@@ -101,7 +101,7 @@ func TestControlDatagramKeepsSID(t *testing.T) {
 	dg := make([]byte, 4+16)
 	dg[3] = 2 // SYN
 	copy(dg[4:], []byte("0123456789abcdef"))
-	d := Decode(dg, false, nil)
+	d := Decode(dg, false, nil, NewReassembler())
 	if d.Flag != "SYN" || d.Frame != nil {
 		t.Fatalf("expected bare SYN, got %+v", d)
 	}
@@ -123,5 +123,95 @@ func TestSplitCoalescedACKs(t *testing.T) {
 	units := SplitDatagrams(buf, false)
 	if len(units) != 3 {
 		t.Fatalf("split into %d, want 3", len(units))
+	}
+}
+
+// TestSplitReassembly covers an oversized payload arriving as fragments,
+// including out-of-order delivery.
+func TestSplitReassembly(t *testing.T) {
+	k := testKey()
+	// a real MessagePack body, since ver=2 payloads are decoded as MessagePack:
+	// {"RoomID": "abc", "Index": 1}
+	payload := []byte{
+		0x82,
+		0xa6, 'R', 'o', 'o', 'm', 'I', 'D', 0xa3, 'a', 'b', 'c',
+		0xa5, 'I', 'n', 'd', 'e', 'x', 0x01,
+	}
+	full := seal(t, k, 2, 3001, payload)
+	frame := full[4:] // drop the RUDP wrapper; fragments carry the frame
+
+	mid := len(frame) / 2
+	mk := func(idx uint16, chunk []byte) []byte {
+		dg := make([]byte, 4+10+len(chunk))
+		dg[3] = 3 // DAT
+		copy(dg[4:8], []byte{0xFF, 0xFE, 0xFD, 0xFC})
+		binary.BigEndian.PutUint16(dg[8:10], 7) // id
+		binary.BigEndian.PutUint16(dg[10:12], idx)
+		binary.BigEndian.PutUint16(dg[12:14], 2) // count
+		copy(dg[14:], chunk)
+		return dg
+	}
+
+	ra := NewReassembler()
+	// deliver the second fragment first
+	d1 := Decode(mk(1, frame[mid:]), false, []Key{k}, ra)
+	if d1.Split == nil || d1.Split.Complete || d1.Frame != nil {
+		t.Fatalf("first-seen fragment should buffer, got %+v", d1.Split)
+	}
+	d0 := Decode(mk(0, frame[:mid]), false, []Key{k}, ra)
+	if d0.Split == nil || !d0.Split.Complete {
+		t.Fatalf("set should be complete, got %+v", d0.Split)
+	}
+	if d0.Frame == nil || !d0.Frame.Recognized {
+		t.Fatalf("reassembled frame not decoded: %+v", d0.Frame)
+	}
+	if d0.Frame.Ver != 2 || d0.Frame.Cmd != 3001 {
+		t.Errorf("reassembled header: ver=%d cmd=%d", d0.Frame.Ver, d0.Frame.Cmd)
+	}
+	if m, ok := d0.Frame.Decoded.(map[string]any); !ok || m["RoomID"] != "abc" {
+		t.Errorf("reassembled payload = %#v", d0.Frame.Decoded)
+	}
+	if ra.Pending() != 0 {
+		t.Errorf("%d fragment sets still pending", ra.Pending())
+	}
+}
+
+// TestIncompleteSplitIsNotEmitted guards against emitting a corrupt payload
+// when a fragment never arrives.
+func TestIncompleteSplitIsNotEmitted(t *testing.T) {
+	ra := NewReassembler()
+	dg := make([]byte, 4+10+8)
+	dg[3] = 3
+	copy(dg[4:8], []byte{0xFF, 0xFE, 0xFD, 0xFC})
+	binary.BigEndian.PutUint16(dg[8:10], 1)
+	binary.BigEndian.PutUint16(dg[10:12], 0)
+	binary.BigEndian.PutUint16(dg[12:14], 3) // expects three
+	d := Decode(dg, false, nil, ra)
+	if d.Frame != nil {
+		t.Error("emitted a frame from an incomplete set")
+	}
+	if ra.Pending() != 1 {
+		t.Errorf("pending = %d, want 1", ra.Pending())
+	}
+}
+
+// TestRoomJoinDecoded covers the Room join reply, which carries a fixed-width
+// room id rather than MessagePack.
+func TestRoomJoinDecoded(t *testing.T) {
+	k := testKey()
+	body := make([]byte, 4+52)
+	copy(body[:4], []byte{0x6a, 0x9f, 0xf7, 0x35})
+	copy(body[4:], "18d356562e66de3d0a7733aa1fa7")
+	dg := seal(t, k, 1, 101, body)
+	d := Decode(dg, false, []Key{k}, NewReassembler())
+	if d.Frame == nil || !d.Frame.Recognized {
+		t.Fatalf("join reply not decoded: %+v", d.Frame)
+	}
+	m, ok := d.Frame.Decoded.(map[string]any)
+	if !ok || m["kind"] != "roomJoined" {
+		t.Fatalf("decoded = %#v", d.Frame.Decoded)
+	}
+	if m["roomId"] != "18d356562e66de3d0a7733aa1fa7" {
+		t.Errorf("roomId = %v", m["roomId"])
 	}
 }

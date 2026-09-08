@@ -46,11 +46,50 @@ export function EventDetail({ e }: { e: TapEvent }) {
         </>
       )}
 
-      {e.udp && (
+      {e.udp?.other && (
+        <>
+          <Section title="Non-Diarkis UDP">
+            <Text style={styles.kv}>
+              dir: {e.udp.dir}   {e.udp.other.bytes} bytes
+            </Text>
+            <Text style={styles.hintText}>
+              This flow carries no Diarkis frames, so it is kept verbatim rather than
+              force-fitted to the Diarkis layout.
+            </Text>
+          </Section>
+          <Section title="Payload (raw)">
+            <HexView hex={e.udp.other.hex} />
+          </Section>
+        </>
+      )}
+
+      {e.udp?.data && (
         <>
           <Section title="Datagram">
-            <Text style={styles.kv}>dir: {e.udp.dir}   flag: {e.udp.data.flag}   wrapSeq: {e.udp.data.wrapSeq}</Text>
+            <Text style={styles.kv}>
+              dir: {e.udp.dir}   flag: {e.udp.data.flag}   wrapSeq: {e.udp.data.wrapSeq}
+            </Text>
           </Section>
+
+          {e.udp.data.split && (
+            <Section title="Oversized payload">
+              <Text style={styles.kv}>
+                fragment {e.udp.data.split.index + 1} of {e.udp.data.split.count}
+                {"   "}id: {e.udp.data.split.id}
+                {"   "}
+                {e.udp.data.split.complete
+                  ? `reassembled ${e.udp.data.split.bytes} bytes`
+                  : `${e.udp.data.split.bytes} bytes buffered`}
+              </Text>
+              {!e.udp.data.split.complete && (
+                <Text style={styles.hintText}>
+                  Waiting for the rest of this set; the frame is decoded once the final
+                  fragment arrives.
+                </Text>
+              )}
+            </Section>
+          )}
+
           {e.udp.data.frame && (
             <Section title="Frame">
               <Text style={styles.kv}>
@@ -77,6 +116,7 @@ export function EventDetail({ e }: { e: TapEvent }) {
           )}
         </>
       )}
+
     </ScrollView>
   );
 }
@@ -116,4 +156,5 @@ const styles = StyleSheet.create({
   header: { color: C.mono, fontSize: 12, fontFamily: "ui-monospace, Menlo, monospace", lineHeight: 17 },
   headerKey: { color: C.dim },
   body: { color: C.mono, fontSize: 12, fontFamily: "ui-monospace, Menlo, monospace" },
+  hintText: { color: C.dim, fontSize: 11.5, marginTop: 4, lineHeight: 16 },
 });

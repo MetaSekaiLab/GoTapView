@@ -167,18 +167,37 @@ func Build(path string) (*Session, error) {
 		if fo := flows[id]; fo != nil {
 			remote = fo.Remote
 		}
-		for _, u := range recs {
-			dirS2C := u.dir == tapfile.DirS2C
-			for _, dg := range diarkis.SplitDatagrams(u.data, dirS2C) {
-				d := diarkis.Decode(dg, dirS2C, keys)
-				dir := "c2s"
-				if dirS2C {
-					dir = "s2c"
-				}
+
+		// Only interpret a flow as Diarkis if it actually looks like it. A
+		// capture also picks up unrelated UDP (NTP, DNS), and forcing the
+		// Diarkis layout onto those invents a bogus wrapper and flag.
+		if !looksLikeDiarkis(recs) {
+			for _, u := range recs {
 				udpEvents = append(udpEvents, Event{
 					Seq: u.seq, TRelNs: u.tRelNs, WallMs: u.wallMs, Kind: "udp",
 					FlowID: id, Remote: remote,
-					UDP: &UDPEvent{Dir: dir, Data: d},
+					UDP: &UDPEvent{Dir: dirName(u.dir), Other: &OtherUDP{
+						Bytes: len(u.data), Hex: hex.EncodeToString(capBytes(u.data, 2048)),
+					}},
+				})
+			}
+			continue
+		}
+
+		// Oversized payloads are split across datagrams, and fragment ids are
+		// only unique per direction, so each direction reassembles separately.
+		ra := map[uint8]*diarkis.Reassembler{
+			tapfile.DirC2S: diarkis.NewReassembler(),
+			tapfile.DirS2C: diarkis.NewReassembler(),
+		}
+		for _, u := range recs {
+			dirS2C := u.dir == tapfile.DirS2C
+			for _, dg := range diarkis.SplitDatagrams(u.data, dirS2C) {
+				d := diarkis.Decode(dg, dirS2C, keys, ra[u.dir])
+				udpEvents = append(udpEvents, Event{
+					Seq: u.seq, TRelNs: u.tRelNs, WallMs: u.wallMs, Kind: "udp",
+					FlowID: id, Remote: remote,
+					UDP: &UDPEvent{Dir: dirName(u.dir), Data: &d},
 				})
 			}
 		}
@@ -197,6 +216,28 @@ func Build(path string) (*Session, error) {
 	sess.Events = all
 	_ = pendingHTTP{}
 	return sess, nil
+}
+
+// looksLikeDiarkis reports whether a UDP flow carries Diarkis traffic, judged
+// by any datagram containing a frame or a split-fragment marker.
+func looksLikeDiarkis(recs []udpRec) bool {
+	for _, u := range recs {
+		if len(u.data) < 5 {
+			continue
+		}
+		body := u.data[4:]
+		if diarkis.HasFrameMagic(body) || diarkis.IsSplitChunk(body) {
+			return true
+		}
+	}
+	return false
+}
+
+func dirName(d uint8) string {
+	if d == tapfile.DirS2C {
+		return "s2c"
+	}
+	return "c2s"
 }
 
 // buildHTTPEvent decodes one request/response pair into a timeline Event and,

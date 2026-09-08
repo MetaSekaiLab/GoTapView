@@ -56,7 +56,7 @@ func TestRealCapture(t *testing.T) {
 	// still carry their parsed header and raw bytes (lossless).
 	var recognized, total, broadcast int
 	for _, e := range sess.Events {
-		if e.UDP == nil || e.UDP.Data.Frame == nil {
+		if e.UDP == nil || e.UDP.Data == nil || e.UDP.Data.Frame == nil {
 			continue
 		}
 		total++
@@ -85,6 +85,21 @@ func TestRealCapture(t *testing.T) {
 		}
 		last = e.Seq
 	}
-	t.Logf("http=%d udp=%d keys=%d recognized=%d/%d broadcasts=%d",
-		sess.Meta.HTTPEvents, sess.Meta.UDPEvents, sess.Meta.DiarkisKeys, recognized, total, broadcast)
+	// Oversized payloads must be reassembled rather than dropped: the room
+	// sync arrives split across datagrams and is the densest message present.
+	var reassembled int
+	for _, e := range sess.Events {
+		if e.UDP != nil && e.UDP.Data != nil && e.UDP.Data.Split != nil && e.UDP.Data.Split.Complete {
+			reassembled++
+			if e.UDP.Data.Frame == nil || !e.UDP.Data.Frame.Recognized {
+				t.Error("a reassembled split payload did not decode")
+			}
+		}
+	}
+	if reassembled == 0 {
+		t.Error("no split payload was reassembled")
+	}
+
+	t.Logf("http=%d udp=%d keys=%d recognized=%d/%d broadcasts=%d reassembled=%d",
+		sess.Meta.HTTPEvents, sess.Meta.UDPEvents, sess.Meta.DiarkisKeys, recognized, total, broadcast, reassembled)
 }

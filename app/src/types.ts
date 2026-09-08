@@ -56,15 +56,32 @@ export interface HttpEvent {
 
 export interface UdpEvent {
   dir: "c2s" | "s2c";
-  data: Datagram;
+  data?: Datagram;
+  /** A datagram from a flow that is not Diarkis (NTP, DNS…), kept verbatim. */
+  other?: OtherUdp;
+}
+
+export interface OtherUdp {
+  bytes: number;
+  hex: string;
 }
 
 export interface Datagram {
   wrapSeq: number;
   flag: string; // UDP | SYN | DAT | ACK | RST | EACK | FIN
   isRudp: boolean;
+  /** Present when this datagram is a fragment of an oversized payload. */
+  split?: SplitInfo;
   frame?: Frame;
   raw?: string; // hex of a non-frame body (e.g. the sid on SYN/ACK/FIN)
+}
+
+export interface SplitInfo {
+  id: number;
+  index: number;
+  count: number;
+  bytes: number;
+  complete: boolean;
 }
 
 export interface Frame {

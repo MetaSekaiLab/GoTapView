@@ -77,6 +77,14 @@ func interpret(fr *Frame, body []byte, dirS2C bool) any {
 	if fr.Ver == 1 && fr.Cmd == 103 {
 		return decodeBroadcast(body, dirS2C)
 	}
+	// ver=1 cmd=101/102: Room join accepted / member left. Both carry a fixed
+	// 52-character ASCII RoomID; join prefixes 4 bytes of room state and leave
+	// appends the departing user id.
+	if fr.Ver == 1 && (fr.Cmd == 101 || fr.Cmd == 102) {
+		if v := decodeRoomMembership(fr.Cmd, body); v != nil {
+			return v
+		}
+	}
 	// ver=0: transport frames carry short ASCII/marker bodies.
 	if fr.Ver == 0 {
 		return decodeTransport(fr.Cmd, body)
@@ -142,6 +150,34 @@ func decodeInnerData(v any) any {
 	}
 }
 
+// roomIDLen is the fixed width of a Diarkis room id on the wire.
+const roomIDLen = 52
+
+// decodeRoomMembership decodes a Room join or leave notification.
+func decodeRoomMembership(cmd uint16, body []byte) any {
+	switch cmd {
+	case 101: // join accepted: 4 bytes of room state, then the room id
+		if len(body) < 4+roomIDLen {
+			return nil
+		}
+		return map[string]any{
+			"kind":   "roomJoined",
+			"roomId": string(trimNul(body[4 : 4+roomIDLen])),
+			"header": hex.EncodeToString(body[:4]),
+		}
+	case 102: // member left: the room id, then the departing user id
+		if len(body) < roomIDLen {
+			return nil
+		}
+		m := map[string]any{"kind": "roomLeft", "roomId": string(trimNul(body[:roomIDLen]))}
+		if rest := trimNul(body[roomIDLen:]); len(rest) > 0 {
+			m["userId"] = string(rest)
+		}
+		return m
+	}
+	return nil
+}
+
 // decodeTransport handles ver=0 transport commands.
 func decodeTransport(cmd uint16, body []byte) any {
 	switch cmd {
@@ -201,13 +237,32 @@ func trimNul(b []byte) []byte {
 	return b
 }
 
+// toInt normalises any MessagePack integer. The encoder picks the narrowest
+// type that fits, so a message id of 1000 can arrive as int16 or uint16; a
+// switch listing only int64/uint64 misses those and silently yields 0.
 func toInt(v any) (int64, bool) {
 	switch t := v.(type) {
+	case int:
+		return int64(t), true
+	case int8:
+		return int64(t), true
+	case int16:
+		return int64(t), true
+	case int32:
+		return int64(t), true
 	case int64:
 		return t, true
+	case uint:
+		return int64(t), true
+	case uint8:
+		return int64(t), true
+	case uint16:
+		return int64(t), true
+	case uint32:
+		return int64(t), true
 	case uint64:
 		return int64(t), true
-	case int:
+	case float32:
 		return int64(t), true
 	case float64:
 		return int64(t), true

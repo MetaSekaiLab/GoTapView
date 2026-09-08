@@ -68,6 +68,15 @@ type HTTPEvent struct {
 
 // UDPEvent is a decoded datagram.
 type UDPEvent struct {
-	Dir  string           `json:"dir"` // "c2s" | "s2c"
-	Data diarkis.Datagram `json:"data"`
+	Dir  string            `json:"dir"` // "c2s" | "s2c"
+	Data *diarkis.Datagram `json:"data,omitempty"`
+	// Other carries a datagram from a flow that is not Diarkis at all (a
+	// capture also sees NTP, DNS and so on), preserved rather than misparsed.
+	Other *OtherUDP `json:"other,omitempty"`
+}
+
+// OtherUDP is an uninterpreted datagram.
+type OtherUDP struct {
+	Bytes int    `json:"bytes"`
+	Hex   string `json:"hex"`
 }
