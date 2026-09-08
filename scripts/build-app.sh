@@ -20,6 +20,10 @@ cd "$ROOT"
 # older system with a clear message instead of crashing).
 MACOS_MIN="26.0"
 
+# Apple expects a numeric CFBundleShortVersionString, so strip any leading "v"
+# from a tag-style argument.
+PLIST_VERSION="${VERSION#v}"
+
 APP_NAME="GoTapView"
 BUNDLE_ID="io.gotapview.viewer"
 OUT="dist"
@@ -78,8 +82,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>$APP_NAME</string>
   <key>CFBundleDisplayName</key><string>$APP_NAME</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-  <key>CFBundleVersion</key><string>$VERSION</string>
-  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$PLIST_VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$PLIST_VERSION</string>
   <key>CFBundleExecutable</key><string>$APP_NAME</string>
   <key>CFBundleIconFile</key><string>$APP_NAME</string>
   <key>CFBundlePackageType</key><string>APPL</string>
