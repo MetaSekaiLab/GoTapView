@@ -215,3 +215,54 @@ func TestRoomJoinDecoded(t *testing.T) {
 		t.Errorf("roomId = %v", m["roomId"])
 	}
 }
+
+// TestBroadcastFieldNaming checks that a known game message's positional
+// payload is turned into named fields (from Sekai.MultiLive.MultiplayConstCommon
+// and the *Payload structs).
+func TestBroadcastFieldNaming(t *testing.T) {
+	k := testKey()
+	// C2S Room broadcast: reliable(1) + RoomID(52) + msgpack [msgId, sender, dataBytes]
+	// data is PlayerLiveInfoPayload as a msgpack array of 8 ints.
+	// PlayerLiveInfoPayload serialised as a msgpack 8-element array:
+	// [combo=0, totalCombo=820, life=0, score=42, baseTotalScore=100, fever=0,
+	//  totalFever=0, joinFever=0]
+	inner := []byte{
+		0x98,             // fixarray, 8 elements
+		0x00,             // 0
+		0xcd, 0x03, 0x34, // uint16 820
+		0x00,             // 0
+		0x2a,             // 42
+		0x64,             // 100
+		0x00, 0x00, 0x00, // 0, 0, 0
+	}
+	// build msgpack: array3 [ 2000, "u", bin(inner) ]
+	msg := []byte{0x93, 0xcd, 0x07, 0xd0, 0xa1, 'u', 0xc4, byte(len(inner))}
+	msg = append(msg, inner...)
+	body := make([]byte, 1+52+len(msg))
+	body[0] = 0
+	copy(body[1:53], "18d356562e66de3d")
+	copy(body[53:], msg)
+
+	dg := seal(t, k, 1, 103, body)
+	d := Decode(dg, false, []Key{k}, NewReassembler())
+	if d.Frame == nil || !d.Frame.Recognized {
+		t.Fatalf("broadcast not decoded: %+v", d.Frame)
+	}
+	m, ok := d.Frame.Decoded.(map[string]any)
+	if !ok {
+		t.Fatalf("decoded is %T", d.Frame.Decoded)
+	}
+	if m["msgType"] != "playerLiveInfo" {
+		t.Errorf("msgType = %v, want playerLiveInfo", m["msgType"])
+	}
+	data, ok := m["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data not labelled: %#v", m["data"])
+	}
+	if _, ok := data["totalCombo"]; !ok {
+		t.Errorf("field totalCombo missing; data = %#v", data)
+	}
+	if _, ok := data["baseTotalScore"]; !ok {
+		t.Errorf("field baseTotalScore missing; data = %#v", data)
+	}
+}

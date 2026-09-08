@@ -3,19 +3,33 @@ package diarkis
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"strconv"
 
 	"gotapview/internal/mpjson"
 )
 
 const pushStatus = 255
 
-// game message ids seen on Room broadcasts (ver=1 cmd=103), from CAPTURE_ANALYSIS.md.
+// Room-broadcast message ids and their payload field names, from
+// Sekai.MultiLive.MultiplayConstCommon and the matching *Payload structs in the
+// il2cpp dump. Each payload struct is [MessagePackObject] with Key(0..n), so it
+// serialises as a positional array; the names here turn that array back into a
+// labelled object.
 var msgIDName = map[int64]string{
-	1000: "countdown",
-	1002: "progress",
-	2000: "score-sync",
-	2001: "ranking",
-	2002: "player-state",
+	1000: "countdown",        // MESSAGE_COUNT_DOWN
+	1001: "stamp",            // MESSAGE_STAMP
+	1002: "loadProgress",     // MESSAGE_LOAD_PROGRESS
+	2000: "playerLiveInfo",   // MESSAGE_RECEIVE_PLAYER_LIVE_INFO
+	2001: "playerPraiseInfo", // MESSAGE_RECEIVE_PLAYER_PRAISE_INFO
+	2002: "playerSkillInfo",  // MESSAGE_RECEIVE_PLAYER_SKILL_INFO
+}
+
+// msgFields names the positional fields of each broadcast payload.
+var msgFields = map[int64][]string{
+	1002: {"progress"},                                                                                   // LoadingProgressPayload
+	2000: {"combo", "totalCombo", "life", "score", "baseTotalScore", "fever", "totalFever", "joinFever"}, // PlayerLiveInfoPayload
+	2001: {"userId", "score", "count", "time"},                                                           // PlayerPraiseInfoPayload
+	2002: {"userId", "userIndex"},                                                                        // PlayerSkillInfoPayload
 }
 
 // decodeFramePayload fills fr.Decoded / fr.Recognized / fr.RawPayload.
@@ -123,8 +137,36 @@ func decodeBroadcast(body []byte, dirS2C bool) any {
 		out["msgType"] = name
 	}
 	out["sender"] = arr[1]
-	// the third element is itself msgpack bytes
-	out["data"] = decodeInnerData(arr[2])
+	out["data"] = labelPayload(msgID, decodeInnerData(arr[2]))
+	return out
+}
+
+// labelPayload turns a positional payload array into a field-named object when
+// the message id is known. Countdown carries a bare little-endian int rather
+// than a struct. Anything unexpected is returned unchanged, so the raw value is
+// never hidden.
+func labelPayload(msgID int64, data any) any {
+	if msgID == 1000 { // countdown: a raw int32, not a struct
+		if hexStr, ok := data.(string); ok {
+			if b, err := hex.DecodeString(hexStr); err == nil && len(b) == 4 {
+				return map[string]any{"count": int(binary.LittleEndian.Uint32(b))}
+			}
+		}
+		return data
+	}
+	fields, ok := msgFields[msgID]
+	arr, isArr := data.([]any)
+	if !ok || !isArr {
+		return data
+	}
+	out := map[string]any{}
+	for i, v := range arr {
+		if i < len(fields) {
+			out[fields[i]] = v
+		} else {
+			out[itoa(i)] = v // extra positional value, kept rather than dropped
+		}
+	}
 	return out
 }
 
@@ -227,6 +269,8 @@ func bytesList(b []byte) ([][]byte, bool) {
 	}
 	return out, true
 }
+
+func itoa(i int) string { return strconv.Itoa(i) }
 
 func trimNul(b []byte) []byte {
 	for i, c := range b {

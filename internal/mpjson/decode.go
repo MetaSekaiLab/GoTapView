@@ -2,7 +2,9 @@ package mpjson
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
+	"math"
 
 	"github.com/vmihailenco/msgpack/v5"
 	"github.com/vmihailenco/msgpack/v5/msgpcode"
@@ -89,18 +91,33 @@ func decodeSyncBlob(raw []byte) (any, bool) {
 	if n != len(data) {
 		return nil, false
 	}
+	// SyncProperty type codes (CP.Realtime.SyncProperty): 1 byte, 2 int32,
+	// 3 int64, 4 string, 5 float, 6 bool, 7 object (nested MessagePack). All
+	// integers are big-endian on the wire.
 	switch t {
-	case 1: // byte / bool
+	case 1: // byte
 		if n == 1 {
 			return map[string]any{"__sync__": "byte", "v": int(data[0])}, true
 		}
-	case 2: // int32, big-endian
+	case 2: // int32
 		if n == 4 {
-			return map[string]any{"__sync__": "int32", "v": int32(uint32(data[0])<<24 | uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3]))}, true
+			return map[string]any{"__sync__": "int32", "v": int32(binary.BigEndian.Uint32(data))}, true
 		}
-	case 4: // UTF-8 string
+	case 3: // int64
+		if n == 8 {
+			return map[string]any{"__sync__": "int64", "v": int64(binary.BigEndian.Uint64(data))}, true
+		}
+	case 4: // string
 		return map[string]any{"__sync__": "str", "v": string(data)}, true
-	case 7: // nested MessagePack
+	case 5: // float32
+		if n == 4 {
+			return map[string]any{"__sync__": "float", "v": math.Float32frombits(binary.BigEndian.Uint32(data))}, true
+		}
+	case 6: // bool
+		if n == 1 {
+			return map[string]any{"__sync__": "bool", "v": data[0] != 0}, true
+		}
+	case 7: // object: nested MessagePack
 		if inner, m, err := DecodeAll(data); err == nil && m == len(data) {
 			return map[string]any{"__sync__": "msgpack", "v": inner}, true
 		}
