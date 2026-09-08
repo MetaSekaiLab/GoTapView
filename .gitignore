@@ -8,6 +8,11 @@
 /out*.json
 testdata/
 
+# The embedded UI bundle is build output produced by scripts/build-app.sh.
+# Only the placeholder is tracked, so `go build ./...` works without Node.
+/internal/ui/dist/*
+!/internal/ui/dist/PLACEHOLDER.txt
+
 # Node / Expo
 app/node_modules/
 app/.expo/

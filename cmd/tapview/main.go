@@ -1,10 +1,8 @@
-// Command tapview decodes a GoTapline .tap capture and serves it as JSON for
-// the GoTapView UI, or dumps it to a file.
+// Command tapview decodes a GoTapline .tap capture and serves it as JSON, for
+// use from the terminal or by an external viewer.
 //
-// It reassembles TLS flows and decrypts the mkcn game API (AES-128-CBC +
-// MessagePack), auto-discovers Diarkis session keys from diarkis-auth
-// responses, and decodes the Diarkis UDP protocol — preserving the raw bytes of
-// anything it cannot fully interpret so nothing is lost.
+// The windowed macOS build is cmd/gotapview-app, which embeds the UI and this
+// same decoder in one binary.
 package main
 
 import (
@@ -12,18 +10,20 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"gotapview/internal/httpapi"
 	"gotapview/internal/session"
+	"gotapview/internal/ui"
 )
 
 func main() {
 	var (
 		file  = flag.String("f", "", "capture file to decode (required)")
-		addr  = flag.String("addr", "127.0.0.1:8787", "address to serve the session JSON on")
+		addr  = flag.String("addr", "127.0.0.1:8787", "address to serve on")
 		out   = flag.String("json", "", "also write the decoded session to this JSON file")
-		noSrv = flag.Bool("no-serve", false, "decode and (optionally) dump, but do not start the server")
+		noSrv = flag.Bool("no-serve", false, "decode and (optionally) dump, but do not serve")
 	)
 	flag.Parse()
 	if *file == "" {
@@ -31,29 +31,46 @@ func main() {
 		os.Exit(2)
 	}
 
-	sess, err := session.Build(*file)
-	if err != nil {
+	if *out != "" || *noSrv {
+		sess, err := session.Build(*file)
+		if err != nil {
+			log.Fatalf("tapview: %v", err)
+		}
+		m := sess.Meta
+		fmt.Printf("decoded %s: %d records, %d flows, %d events (%d http, %d udp), %d diarkis key(s)%s\n",
+			m.File, m.Records, m.Flows, len(sess.Events), m.HTTPEvents, m.UDPEvents, m.DiarkisKeys, truncNote(m.Truncated))
+		if *out != "" {
+			b, _ := json.MarshalIndent(sess, "", "  ")
+			if err := os.WriteFile(*out, b, 0o644); err != nil {
+				log.Fatalf("tapview: write %s: %v", *out, err)
+			}
+			fmt.Printf("wrote %s\n", *out)
+		}
+		if *noSrv {
+			return
+		}
+	}
+
+	var uiHandler = http.Handler(nil)
+	if ui.Available() {
+		uiHandler = ui.Handler()
+	}
+	srv := httpapi.New(uiHandler)
+	if err := srv.Load(*file); err != nil {
 		log.Fatalf("tapview: %v", err)
 	}
-	m := sess.Meta
-	fmt.Printf("decoded %s: %d records, %d flows, %d events (%d http, %d udp), %d diarkis key(s)%s\n",
-		m.File, m.Records, m.Flows, len(sess.Events), m.HTTPEvents, m.UDPEvents, m.DiarkisKeys,
-		truncNote(m.Truncated))
-
-	if *out != "" {
-		b, _ := json.MarshalIndent(sess, "", "  ")
-		if err := os.WriteFile(*out, b, 0o644); err != nil {
-			log.Fatalf("tapview: write %s: %v", *out, err)
-		}
-		fmt.Printf("wrote %s\n", *out)
+	if desc, ok := srv.Meta(); ok {
+		fmt.Printf("decoded %s\n", desc)
 	}
-
-	if *noSrv {
-		return
+	ln, url, err := httpapi.Listen(*addr)
+	if err != nil {
+		log.Fatalf("tapview: listen: %v", err)
 	}
-	if err := httpapi.Serve(*addr, sess); err != nil {
-		log.Fatalf("tapview: serve: %v", err)
+	fmt.Printf("serving %s/session\n", url)
+	if ui.Available() {
+		fmt.Printf("viewer  %s\n", url)
 	}
+	log.Fatal(srv.Serve(ln))
 }
 
 func truncNote(t bool) string {

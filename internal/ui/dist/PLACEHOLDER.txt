@@ -1,0 +1,8 @@
+This directory holds the exported viewer UI, which is embedded into the binary
+by internal/ui (go:embed).
+
+It is build output and is not tracked: run scripts/build-app.sh to populate it
+from ./app via `expo export --platform web`. This file exists so that go:embed
+always has something to embed, keeping `go build ./...` working without Node —
+in that state internal/ui.Available() reports false and the windowed app exits
+with an explanatory message.

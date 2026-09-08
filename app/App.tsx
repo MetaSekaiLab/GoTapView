@@ -3,7 +3,7 @@ import {
   ActivityIndicator, FlatList, Modal, Pressable, RefreshControl,
   SafeAreaView, StatusBar, StyleSheet, Text, TextInput, View,
 } from "react-native";
-import { DEFAULT_BASE, fetchSession } from "./src/api";
+import { DEFAULT_BASE, fetchSession, isEmbedded, NoCapture, pickCapture } from "./src/api";
 import { Session, TapEvent } from "./src/types";
 import { C } from "./src/theme";
 import { FilterBar, KindFilter } from "./src/components/FilterBar";
@@ -18,18 +18,36 @@ export default function App() {
   const [kind, setKind] = useState<KindFilter>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<TapEvent | null>(null);
+  const [needsCapture, setNeedsCapture] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setSession(await fetchSession(base));
+      setNeedsCapture(false);
     } catch (e: any) {
-      setError(e?.message ?? String(e));
+      if (e instanceof NoCapture) {
+        // Server is up but nothing is open yet — offer the picker instead of
+        // presenting this as a failure.
+        setNeedsCapture(true);
+        setSession(null);
+      } else {
+        setError(e?.message ?? String(e));
+      }
     } finally {
       setLoading(false);
     }
   }, [base]);
+
+  const choose = useCallback(async () => {
+    try {
+      const p = await pickCapture(base);
+      if (p) await load();
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    }
+  }, [base, load]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -64,18 +82,24 @@ export default function App() {
           </Text>
         )}
         <View style={styles.baseRow}>
-          <TextInput
-            value={base}
-            onChangeText={setBase}
-            onSubmitEditing={load}
-            style={styles.baseInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="http://mac-ip:8787"
-            placeholderTextColor={C.dim}
-          />
+          {isEmbedded ? (
+            <Pressable style={styles.reload} onPress={choose}>
+              <Text style={styles.reloadText}>Choose capture…</Text>
+            </Pressable>
+          ) : (
+            <TextInput
+              value={base}
+              onChangeText={setBase}
+              onSubmitEditing={load}
+              style={styles.baseInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="http://mac-ip:8787"
+              placeholderTextColor={C.dim}
+            />
+          )}
           <Pressable style={styles.reload} onPress={load}>
-            <Text style={styles.reloadText}>Load</Text>
+            <Text style={styles.reloadText}>{isEmbedded ? "Reload" : "Load"}</Text>
           </Pressable>
         </View>
       </View>
@@ -89,7 +113,23 @@ export default function App() {
         </View>
       )}
 
-      {!error && loading && !session && (
+      {!error && needsCapture && (
+        <View style={styles.center}>
+          <Text style={styles.emptyTitle}>No capture open</Text>
+          <Text style={styles.hint}>
+            {isEmbedded
+              ? "Choose a .tap file recorded by GoTapline."
+              : "Start the decoder:  tapview -f capture.tap"}
+          </Text>
+          {isEmbedded && (
+            <Pressable style={styles.bigBtn} onPress={choose}>
+              <Text style={styles.reloadText}>Choose capture…</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {!error && !needsCapture && loading && !session && (
         <View style={styles.center}><ActivityIndicator color={C.accent} /></View>
       )}
 
@@ -157,6 +197,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20, gap: 12 },
   error: { color: C.bad, textAlign: "center", fontSize: 13 },
   hint: { color: C.dim, textAlign: "center", fontSize: 12, fontFamily: "ui-monospace, Menlo, monospace" },
+  emptyTitle: { color: C.text, fontSize: 16, fontWeight: "700" },
+  bigBtn: { backgroundColor: C.accent, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   modalBar: { padding: 10, backgroundColor: C.panel, borderBottomWidth: 1, borderBottomColor: C.border },
   close: { color: C.accent, fontSize: 15, fontWeight: "700" },
 });
