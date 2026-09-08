@@ -104,8 +104,10 @@ func interpret(fr *Frame, body []byte, dirS2C bool) any {
 		return decodeTransport(fr.Cmd, body)
 	}
 	// Everything else (Sekai ver=2 game commands, room properties) is msgpack.
+	// Property bags inside carry SyncProperty ids as integer keys; labelProps
+	// renames them to their Room/PlayerProperty names (recovered via Frida).
 	if v, n, err := mpjson.DecodeAll(body); err == nil && n == len(body) {
-		return v
+		return labelProps(v, fr.Cmd)
 	}
 	return nil
 }
