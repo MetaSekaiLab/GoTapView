@@ -14,6 +14,12 @@ VERSION="${1:-dev}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Minimum macOS this app supports. It is applied in two places that must agree:
+# the linker (so the binary's LC_BUILD_VERSION minos matches) and
+# LSMinimumSystemVersion in Info.plist (so Finder refuses to launch it on an
+# older system with a clear message instead of crashing).
+MACOS_MIN="26.0"
+
 APP_NAME="GoTapView"
 BUNDLE_ID="io.gotapview.viewer"
 OUT="dist"
@@ -39,11 +45,15 @@ test -f internal/ui/dist/index.html || { echo "export produced no index.html"; e
 echo "==> building the app binary (arm64, CGO for WKWebView)"
 rm -rf "$OUT"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN" \
+CGO_CFLAGS="-mmacosx-version-min=$MACOS_MIN" \
+CGO_LDFLAGS="-mmacosx-version-min=$MACOS_MIN" \
 CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath \
   -ldflags "-s -w -X main.version=$VERSION" \
   -o "$APP/Contents/MacOS/$APP_NAME" ./cmd/gotapview-app
 
 echo "==> building the headless CLI"
+MACOSX_DEPLOYMENT_TARGET="$MACOS_MIN" \
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath \
   -ldflags "-s -w" -o "$OUT/tapview" ./cmd/tapview
 
@@ -73,7 +83,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>$APP_NAME</string>
   <key>CFBundleIconFile</key><string>$APP_NAME</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>LSMinimumSystemVersion</key><string>$MACOS_MIN</string>
   <key>NSHighResolutionCapable</key><true/>
   <!-- The UI and API are served on 127.0.0.1 inside this process. -->
   <key>NSAppTransportSecurity</key>
@@ -98,3 +108,10 @@ echo
 echo "built $APP"
 du -sh "$APP" | awk '{print "     size: "$1}'
 echo "     CLI: $OUT/tapview"
+# Verify the linked minimum matches what the plist claims.
+LINKED_MIN="$(otool -l "$APP/Contents/MacOS/$APP_NAME" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')"
+echo "     min macOS: $MACOS_MIN (plist)  /  $LINKED_MIN (linked)"
+if [ "$LINKED_MIN" != "$MACOS_MIN" ]; then
+  echo "     WARNING: linked minimum $LINKED_MIN does not match $MACOS_MIN;" >&2
+  echo "              the bundle would advertise support it does not have." >&2
+fi

@@ -54,14 +54,29 @@ Click **Choose capture…** and pick a `.tap`. To open one directly:
 open -n GoTapView.app --args -f /path/to/capture.tap
 ```
 
+## Requirements
+
+| | minimum macOS | why |
+|---|---|---|
+| `GoTapView.app` | **26** | links WKWebView against the current SDK |
+| `tapview` (CLI) | 13 | pure Go, no WebView dependency |
+
+Apple silicon (arm64). Both builds are unsigned and un-notarized, hence the `xattr` step above.
+
 ## Build it yourself
 
 ```sh
-scripts/build-app.sh v0.1.0     # → dist/GoTapView.app  and  dist/tapview
+scripts/build-app.sh v0.2.1     # → dist/GoTapView.app  and  dist/tapview
 ```
 
 The script exports the RN app to a web bundle, embeds it, builds the windowed binary (CGO, links
 WKWebView) and assembles the bundle. Needs Node and Xcode command-line tools.
+
+The minimum macOS lives in one place, `MACOS_MIN` in that script, and is applied both to the linker
+and to `LSMinimumSystemVersion`. The script then compares the linked `LC_BUILD_VERSION` against what
+the plist claims and warns on a mismatch — without that check a bundle can advertise support it does
+not actually have, which is how the v0.2.0 build ended up claiming macOS 11 while its binary
+required 27.
 
 ## Headless / mobile
 
