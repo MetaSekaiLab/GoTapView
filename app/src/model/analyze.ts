@@ -28,6 +28,11 @@ export interface Count {
   count: number;
 }
 
+export interface Player {
+  uid: string;
+  name?: string; // nickname, when a room sync paired it with this uid
+}
+
 export interface Overview {
   span: { startMs: number; endMs: number; durationMs: number };
   protocol: { http: number; udpFrames: number; udpControl: number; nonDiarkis: number };
@@ -35,7 +40,7 @@ export interface Overview {
   msgTypes: Count[];
   keyPoint: { seq: number; relMs: number } | null;
   diarkisKeys: number;
-  players: string[];
+  players: Player[];
   flows: number;
   records: number;
   truncated: boolean;
@@ -51,7 +56,8 @@ export function analyze(session: Session): Overview {
   const protocol = { http: 0, udpFrames: 0, udpControl: 0, nonDiarkis: 0 };
   const cmds = new Map<string, number>();
   const msgTypes = new Map<string, number>();
-  const players = new Set<string>();
+  const uids = new Set<string>(); // every user id seen (broadcast senders + syncs)
+  const nameByUid = new Map<string, string>(); // uid -> nickname, from room syncs
   let keyPoint: Overview["keyPoint"] = null;
 
   const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
@@ -80,9 +86,9 @@ export function analyze(session: Session): Overview {
       if (bc) {
         const mt = String(bc.msgType ?? (bc.msgId !== undefined ? `msg${bc.msgId}` : ""));
         if (mt) bump(msgTypes, mt);
-        if (bc.sender !== undefined) players.add(String(bc.sender));
+        if (bc.sender !== undefined) uids.add(String(bc.sender));
       }
-      collectNicknames(f.decoded, players);
+      collectIdentities(f.decoded, uids, nameByUid);
     } else {
       protocol.udpControl++;
     }
@@ -107,25 +113,43 @@ export function analyze(session: Session): Overview {
     msgTypes: toCounts(msgTypes, (k) => k),
     keyPoint,
     diarkisKeys: session.meta.diarkisKeys,
-    players: [...players],
+    players: buildPlayers(uids, nameByUid),
     flows: session.meta.flows,
     records: session.meta.records,
     truncated: session.meta.truncated,
   };
 }
 
-// collectNicknames pulls any player-property nickname out of a decoded payload
-// so the Overview can list who was in the room.
-function collectNicknames(decoded: unknown, into: Set<string>): void {
+// buildPlayers turns the collected ids and uid→name map into one entry per
+// player, named ones first, then by uid.
+function buildPlayers(uids: Set<string>, nameByUid: Map<string, string>): Player[] {
+  const all = new Set<string>([...uids, ...nameByUid.keys()]);
+  return [...all]
+    .map((uid) => ({ uid, name: nameByUid.get(uid) }))
+    .sort((a, b) => (a.name ? 0 : 1) - (b.name ? 0 : 1) || a.uid.localeCompare(b.uid));
+}
+
+// collectIdentities pairs a UserID with its nickname wherever a room sync places
+// them together (the top-level user and each Players[] entry of cmd 3001, and
+// any similarly shaped object). This is what lets the Overview show a name
+// against a uid instead of listing the two separately.
+function collectIdentities(decoded: unknown, uids: Set<string>, nameByUid: Map<string, string>): void {
   const visit = (v: any) => {
     if (!v || typeof v !== "object") return;
-    if (v.__props__ === "player" && v.Values && typeof v.Values === "object") {
-      const nick = v.Values.nickname;
-      const name = nick && typeof nick === "object" ? nick.v : undefined;
-      if (typeof name === "string" && name) into.add(name);
+    if (!Array.isArray(v)) {
+      const uid = v.UserID ?? v.UserId ?? v.userId;
+      if (uid !== undefined && uid !== null) {
+        const id = String(uid);
+        uids.add(id);
+        const pp = v.PlayerProperty;
+        const nick = pp && pp.Values && pp.Values.nickname;
+        const name = nick && typeof nick === "object" ? nick.v : undefined;
+        if (typeof name === "string" && name) nameByUid.set(id, name);
+      }
+      Object.values(v).forEach(visit);
+    } else {
+      v.forEach(visit);
     }
-    if (Array.isArray(v)) v.forEach(visit);
-    else Object.values(v).forEach(visit);
   };
   visit(decoded);
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"math"
+	"strconv"
 
 	"github.com/vmihailenco/msgpack/v5"
 	"github.com/vmihailenco/msgpack/v5/msgpcode"
@@ -125,11 +126,27 @@ func decodeSyncBlob(raw []byte) (any, bool) {
 	return nil, false
 }
 
-// normalise walks a decoded value converting any []byte to hex.
+// maxSafeInt is JavaScript's Number.MAX_SAFE_INTEGER (2^53-1). Integers beyond
+// this cannot round-trip through a JSON number in the browser, so they are
+// emitted as strings. This matters for 19-digit user ids: a broadcast sender is
+// a wire uint64 (would round to …615000 in JS) while the same id in a room sync
+// is a wire string — rendering both as strings keeps them equal and exact.
+const maxSafeInt = 1<<53 - 1
+
+// normalise walks a decoded value converting any []byte to hex and any integer
+// too large for a JS number to a string.
 func normalise(v any) any {
 	switch t := v.(type) {
 	case []byte:
 		return renderBin(t)
+	case int:
+		return safeInt(int64(t))
+	case int64:
+		return safeInt(t)
+	case uint:
+		return safeUint(uint64(t))
+	case uint64:
+		return safeUint(t)
 	case []any:
 		for i := range t {
 			t[i] = normalise(t[i])
@@ -160,6 +177,22 @@ func isCompound(v any) bool {
 }
 
 func hexStr(b []byte) string { return hex.EncodeToString(b) }
+
+// safeInt / safeUint keep small integers as numbers and stringify anything a JS
+// Number could not represent exactly.
+func safeInt(n int64) any {
+	if n > maxSafeInt || n < -maxSafeInt {
+		return strconv.FormatInt(n, 10)
+	}
+	return n
+}
+
+func safeUint(n uint64) any {
+	if n > maxSafeInt {
+		return strconv.FormatUint(n, 10)
+	}
+	return n
+}
 
 func keyString(k any) string {
 	switch t := k.(type) {

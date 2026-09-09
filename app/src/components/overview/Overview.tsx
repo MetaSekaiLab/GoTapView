@@ -33,26 +33,31 @@ export function Overview({ session }: { session: Session }) {
         </View>
         {o.players.length > 0 && (
           <View>
-            <Text style={{ color: theme.dim, fontSize: 11, marginTop: 4, marginBottom: 4 }}>
+            <Text style={{ color: theme.dim, fontSize: 11, marginTop: 4, marginBottom: 5 }}>
               players seen ({o.players.length})
             </Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            <View style={{ gap: 4 }}>
               {o.players.map((p) => (
-                <Text
-                  key={p}
+                <View
+                  key={p.uid}
                   style={{
-                    color: theme.text,
-                    fontSize: 11.5,
-                    fontFamily: theme.monoFont,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
                     backgroundColor: theme.surfaceAlt,
-                    borderRadius: 5,
-                    paddingHorizontal: 7,
-                    paddingVertical: 3,
+                    borderRadius: 6,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
                   }}
-                  selectable
                 >
-                  {p}
-                </Text>
+                  <Text style={{ color: p.name ? theme.text : theme.dim, fontSize: 12, fontWeight: p.name ? "600" : "400", flexShrink: 1 }} selectable numberOfLines={1}>
+                    {p.name ?? "(unknown)"}
+                  </Text>
+                  <View style={{ flex: 1 }} />
+                  <Text style={{ color: theme.dim, fontSize: 11, fontFamily: theme.monoFont }} selectable>
+                    {p.uid}
+                  </Text>
+                </View>
               ))}
             </View>
           </View>
