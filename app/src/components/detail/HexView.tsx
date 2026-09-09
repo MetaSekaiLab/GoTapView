@@ -1,10 +1,11 @@
 import React from "react";
-import { Text, StyleSheet } from "react-native";
-import { C } from "../theme";
+import { Text } from "react-native";
+import { useTheme } from "../../theme";
 
-// HexView renders a hex string as a classic offset/hex/ascii dump, capped so a
-// huge blob does not lock up the list.
+// HexView renders a hex string as a classic offset / hex / ascii dump, capped so
+// a huge blob does not lock up the list.
 export function HexView({ hex, max = 512 }: { hex: string; max?: number }) {
+  const { theme } = useTheme();
   const bytes: number[] = [];
   for (let i = 0; i + 1 < hex.length && bytes.length < max; i += 2) {
     bytes.push(parseInt(hex.slice(i, i + 2), 16));
@@ -18,18 +19,9 @@ export function HexView({ hex, max = 512 }: { hex: string; max?: number }) {
   }
   const truncated = hex.length / 2 > max;
   return (
-    <Text style={styles.hex} selectable>
+    <Text style={{ fontFamily: theme.monoFont, fontSize: 11.5, color: theme.dim, lineHeight: 16 }} selectable>
       {lines.join("\n")}
       {truncated ? `\n… ${hex.length / 2 - max} more bytes` : ""}
     </Text>
   );
 }
-
-const styles = StyleSheet.create({
-  hex: {
-    fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-    fontSize: 11.5,
-    color: C.dim,
-    lineHeight: 16,
-  },
-});

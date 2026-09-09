@@ -1,6 +1,10 @@
 import { TapEvent } from "./types";
+import { firstBroadcast, kindLabel, searchText } from "./model/search";
 
-// oneLine produces the compact right-hand summary shown on each timeline row.
+// Re-export so existing importers of ./summary keep working.
+export { searchText };
+
+// summarize produces the compact right-hand summary shown on each timeline row.
 export function summarize(e: TapEvent): string {
   if (e.http) {
     const h = e.http;
@@ -42,43 +46,7 @@ function broadcastLabel(decoded: unknown): string | null {
   return t ? String(t) : null;
 }
 
-// kindLabel surfaces the decoder's own label for non-broadcast payloads
-// (clientKey, migrate, roomJoined, echo…).
-function kindLabel(decoded: unknown): string | null {
-  if (decoded && typeof decoded === "object" && !Array.isArray(decoded)) {
-    const k = (decoded as any).kind;
-    if (typeof k === "string") return k;
-  }
-  return null;
-}
-
-function firstBroadcast(decoded: unknown): any | null {
-  if (Array.isArray(decoded)) return decoded.length ? firstBroadcast(decoded[0]) : null;
-  if (decoded && typeof decoded === "object") {
-    const o = decoded as any;
-    if ("msgId" in o || "msgType" in o) return o;
-  }
-  return null;
-}
-
 function trimPath(p: string): string {
   // collapse the long numeric userId so paths line up
   return p.replace(/\/\d{15,}/g, "/{uid}");
-}
-
-// searchText builds the string a row is matched against by the filter box.
-export function searchText(e: TapEvent): string {
-  const parts: string[] = [e.remote];
-  if (e.http) parts.push(e.http.method, e.http.path, String(e.http.status), e.http.note ?? "");
-  if (e.udp) {
-    if (e.udp.other) parts.push("non-diarkis");
-    parts.push(e.udp.dir, e.udp.data?.flag ?? "");
-    const f = e.udp.data?.frame;
-    if (f) {
-      parts.push(`ver${f.ver}`, `cmd${f.cmd}`);
-      const bc = firstBroadcast(f.decoded);
-      if (bc) parts.push(String(bc.msgId ?? ""), String(bc.msgType ?? ""));
-    }
-  }
-  return parts.join(" ").toLowerCase();
 }

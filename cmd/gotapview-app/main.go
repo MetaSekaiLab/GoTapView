@@ -55,7 +55,13 @@ func main() {
 		}
 	}
 
-	ln, url, err := httpapi.Listen("127.0.0.1:0")
+	// Prefer a stable port so the page origin (and thus its localStorage — where
+	// theme and layout preferences live) is the same across launches. Fall back
+	// to any free port if it is taken (e.g. a second instance).
+	ln, url, err := httpapi.Listen("127.0.0.1:8787")
+	if err != nil {
+		ln, url, err = httpapi.Listen("127.0.0.1:0")
+	}
 	if err != nil {
 		log.Fatalf("gotapview-app: listen: %v", err)
 	}
