@@ -1,0 +1,6 @@
+release/
+node_modules/
+dist/
+dist-electron/
+resources/tapview
+public/sess.json

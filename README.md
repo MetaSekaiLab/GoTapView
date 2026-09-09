@@ -4,24 +4,22 @@ A viewer for [GoTapline](https://github.com/TONY-All/GoTapline) `.tap` captures.
 decrypts a capture and shows the traffic on one timeline, with TLS and UDP interleaved in the
 exact order they happened.
 
-Ships as a single **macOS app** — double-click, choose a `.tap`, read the traffic. The same code
-also runs as a headless CLI plus an Expo app if you prefer that split.
+Ships as a single **macOS app** (Electron) — open it, choose a `.tap`, read the traffic.
 
-Two modules, one binary:
+Two parts:
 
 1. **decoder (Go)** — reads a `.tap`, reassembles TLS flows, decrypts the Project Sekai game API
    (AES-128-CBC + MessagePack) to JSON, auto-discovers Diarkis session keys from the decrypted
-   `diarkis-auth` responses, and decodes the Diarkis realtime UDP protocol. Serves the decoded
+   `diarkis-auth` responses, and decodes the Diarkis realtime UDP protocol. Emits the decoded
    session as JSON.
-2. **viewer (`app/`, Expo / React Native)** — renders the timeline, with a detail view showing
-   decrypted request/response JSON and decoded UDP frames.
+2. **viewer (`desktop/`, Electron + React + Tailwind)** — a standard react-dom app that renders the
+   timeline, a session overview, and a detail view showing decrypted request/response JSON and
+   decoded UDP frames.
 
-In the packaged app both live in one process: the UI is embedded with `go:embed` and shown in a
-WKWebView window, so there is nothing to install and no port to configure.
-
-> The desktop build renders the React Native source through **React Native Web** inside a native
-> window — the UI code is shared verbatim with the mobile app, but the rendering layer is web, not
-> `react-native-macos`.
+The Electron **main process spawns the Go decoder as a bundled sidecar** (`tapview -json -`), reads
+its JSON over one IPC call, and hands it to the renderer — there is no localhost server and no port
+to configure. The pure decode-adjacent logic (`desktop/src/model/*`) is shared TypeScript; the Go
+decoder is the single source of truth for the wire formats.
 
 The design point: within one capture you can watch the game fetch its realtime keys over HTTPS and
 then watch those same keys decrypt the UDP that follows — the HTTP and UDP halves are proven
@@ -33,107 +31,92 @@ against each other, on a single clock.
   MessagePack → JSON. Login, `diarkis-auth`, room APIs, etc.
 - **Diarkis UDP**: RUDP wrapper + frame header, coalesced-datagram splitting, encrypt-then-MAC
   secure payload (per-session keys taken from the capture's own `diarkis-auth` responses),
-  MessagePack, SyncData property blobs (`type|len|data`), and Room broadcast messages
-  (`[msgId, sender, data]`).
+  MessagePack, SyncData property blobs, Room broadcast messages, and the multi-live
+  RoomProperty/PlayerProperty maps (named at runtime) — e.g. `BASIC_INFO` expands to the full
+  `RoomUserBasicInfo` struct.
 - **Lossless on the unknown**: a UDP frame that cannot be fully decoded still shows the fields that
-  parsed (seq / flag / ver / cmd / status) and keeps the rest as hex. An HTTP body that cannot be
-  decrypted is preserved as text or hex.
+  parsed (seq / flag / ver / cmd / status) and keeps the rest as hex; an undecryptable HTTP body is
+  preserved as text or hex.
 
 ## Use the app
 
-Download `GoTapView.app` from the releases page, then:
+Download `GoTapView-<ver>-arm64.dmg` from the releases page, drag it to Applications, then:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/GoTapView.app   # unsigned build
 open /Applications/GoTapView.app
 ```
 
-Click **Choose capture…** and pick a `.tap`. To open one directly:
+Click **Open capture…** (or File → Open, ⌘O) and pick a `.tap`; double-clicking a `.tap` in Finder
+also opens it. Arrow keys ↑/↓ step through packets, the logo returns to the overview, and the theme
+follows the system (toggle in the top-right).
 
-```sh
-open -n GoTapView.app --args -f /path/to/capture.tap
-```
-
-## Requirements
-
-| | minimum macOS | why |
-|---|---|---|
-| `GoTapView.app` | **26** | links WKWebView against the current SDK |
-| `tapview` (CLI) | 13 | pure Go, no WebView dependency |
-
-Apple silicon (arm64). Both builds are unsigned and un-notarized, hence the `xattr` step above.
+Apple silicon (arm64), macOS 11+. The build is unsigned and un-notarized, hence the `xattr` step.
 
 ## Build it yourself
 
 ```sh
-scripts/build-app.sh v0.2.1     # → dist/GoTapView.app  and  dist/tapview
+scripts/build-desktop.sh v0.7.0     # → desktop/release/GoTapView-0.7.0-arm64.dmg (+ .zip)
 ```
 
-The script exports the RN app to a web bundle, embeds it, builds the windowed binary (CGO, links
-WKWebView) and assembles the bundle. Needs Node and Xcode command-line tools.
+The script cross-builds the Go decoder into `desktop/resources/tapview`, builds the React renderer
+and the Electron main/preload with Vite, and packages everything with electron-builder. Needs Go and
+Node.
 
-The minimum macOS lives in one place, `MACOS_MIN` in that script, and is applied both to the linker
-and to `LSMinimumSystemVersion`. The script then compares the linked `LC_BUILD_VERSION` against what
-the plist claims and warns on a mismatch — without that check a bundle can advertise support it does
-not actually have, which is how the v0.2.0 build ended up claiming macOS 11 while its binary
-required 27.
+Dev loop:
 
-## Headless / mobile
+```sh
+cd desktop && npm install && npm run dev     # Vite + Electron with HMR
+```
 
-The decoder also runs on its own, which is what you want for scripting or for viewing on a phone:
+## Headless CLI
+
+The decoder also runs on its own — for scripting, or to serve the JSON:
 
 ```sh
 go build -o tapview ./cmd/tapview
-./tapview -f capture.tap                       # serves the UI + JSON on :8787
-./tapview -f capture.tap -json out.json -no-serve   # or just dump JSON
+./tapview -f capture.tap -json out.json -no-serve   # dump JSON to a file
+./tapview -f capture.tap -json - -no-serve          # …or to stdout (this is the Electron sidecar)
+./tapview -f capture.tap                            # serve /session on :8787
 ```
-
-For the Expo app against that server:
-
-```sh
-cd app && npm install && npx expo start        # w = web, i = iOS simulator
-```
-
-On the simulator `localhost` reaches your Mac; on a real device set the address field to your Mac's
-LAN IP (e.g. `http://192.168.2.155:8787`).
 
 ## Architecture
 
 ```
-                       ┌─────────────── GoTapView.app ───────────────┐
-capture.tap ──▶ decoder (Go) ──▶ /session (JSON) ──▶ embedded UI ──▶ WKWebView
-                       └────────────────────────────────────────────┘
-                  │
-                  ├─ internal/tapfile   read the .tap container
-                  ├─ internal/httpx     reassemble TLS streams, frame HTTP/1.1 (CL/chunked/gzip)
-                  ├─ internal/apicrypto mkcn AES-128-CBC/PKCS7
-                  ├─ internal/mpjson    MessagePack → JSON (bin as hex, nested msgpack, SyncData)
-                  ├─ internal/diarkis   UDP wrapper/frame/secure-payload/broadcast decode
-                  ├─ internal/keyring   discover Diarkis keys from diarkis-auth responses
-                  ├─ internal/session   assemble the timeline (events ordered by capture seq)
-                  ├─ internal/httpapi   serve /session, /pick (native file dialog), /open
-                  └─ internal/ui        go:embed of the exported viewer bundle
+                    ┌──────────────── GoTapView.app (Electron) ────────────────┐
+capture.tap ──▶ main process ──spawn──▶ tapview (Go sidecar, -json -) ──JSON──▶ │
+                    │                                                     IPC   │
+                    └── preload (window.gotap) ──▶ renderer (React + Tailwind) ─┘
+
+Go decoder (cmd/tapview + internal/*):
+  ├─ internal/tapfile    read the .tap container
+  ├─ internal/httpx      reassemble TLS streams, frame HTTP/1.1 (CL/chunked/gzip)
+  ├─ internal/apicrypto  mkcn AES-128-CBC/PKCS7
+  ├─ internal/mpjson     MessagePack → JSON (bin as hex, nested msgpack, SyncData, 64-bit-safe ints)
+  ├─ internal/diarkis    UDP wrapper/frame/secure-payload/broadcast + property maps + struct naming
+  ├─ internal/keyring    discover Diarkis keys from diarkis-auth responses
+  ├─ internal/session    assemble the timeline (events ordered by capture seq)
+  └─ internal/httpapi    optional /session server for the standalone CLI
+
+Renderer (desktop/src):
+  ├─ model/*             pure TS: analyze, facets, group, phase, props, search (shared logic)
+  ├─ theme/              CSS-variable palette + data-theme (system/light/dark)
+  ├─ components/         primitives, timeline (virtualized), detail, overview, toolbar
+  └─ screens/AppShell    load → filter/group → master-detail layout
 ```
 
-`cmd/gotapview-app` is the windowed build; `cmd/tapview` is the headless one. Both use the same
-decoder, so a capture reads identically either way.
-
-The session JSON is the only contract between the two modules; its shape is mirrored in
-`app/src/types.ts`.
+The session JSON is the only contract between decoder and viewer; its shape is mirrored in
+`desktop/src/types.ts`.
 
 ## Verify
 
 ```sh
-go test ./...          # unit tests + a real-capture integration test (skips if no fixture)
-go vet ./...
-cd app && npx tsc --noEmit
+go test ./... && go vet ./...          # decoder: unit tests + real-capture integration test
+cd desktop && npm run build            # renderer: tsc --noEmit + vite build
 ```
 
-`go build ./...` works without Node: `internal/ui/dist` keeps a tracked placeholder, and in that
-state the windowed app exits with a message pointing at `scripts/build-app.sh`.
-
-The integration test decodes a real capture and asserts the login decrypted to a `sessionToken`,
-a Diarkis key was discovered, and >95% of UDP frames decoded — but the `.tap` fixture is **not**
+The integration test decodes a real capture and asserts the login decrypted to a `sessionToken`, a
+Diarkis key was discovered, and >95% of UDP frames decoded — but the `.tap` fixture is **not**
 committed, because a capture contains real account tokens and keys.
 
 ## Note on secrets

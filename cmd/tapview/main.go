@@ -22,7 +22,7 @@ func main() {
 	var (
 		file  = flag.String("f", "", "capture file to decode (required)")
 		addr  = flag.String("addr", "127.0.0.1:8787", "address to serve on")
-		out   = flag.String("json", "", "also write the decoded session to this JSON file")
+		out   = flag.String("json", "", "write the decoded session as JSON to this file, or \"-\" for stdout")
 		noSrv = flag.Bool("no-serve", false, "decode and (optionally) dump, but do not serve")
 	)
 	flag.Parse()
@@ -37,14 +37,27 @@ func main() {
 			log.Fatalf("tapview: %v", err)
 		}
 		m := sess.Meta
-		fmt.Printf("decoded %s: %d records, %d flows, %d events (%d http, %d udp), %d diarkis key(s)%s\n",
+		// "-" streams compact JSON to stdout (for the Electron sidecar). The
+		// status line then goes to stderr so it does not corrupt the JSON.
+		toStdout := *out == "-"
+		status := os.Stdout
+		if toStdout {
+			status = os.Stderr
+		}
+		fmt.Fprintf(status, "decoded %s: %d records, %d flows, %d events (%d http, %d udp), %d diarkis key(s)%s\n",
 			m.File, m.Records, m.Flows, len(sess.Events), m.HTTPEvents, m.UDPEvents, m.DiarkisKeys, truncNote(m.Truncated))
 		if *out != "" {
-			b, _ := json.MarshalIndent(sess, "", "  ")
-			if err := os.WriteFile(*out, b, 0o644); err != nil {
-				log.Fatalf("tapview: write %s: %v", *out, err)
+			if toStdout {
+				if err := json.NewEncoder(os.Stdout).Encode(sess); err != nil {
+					log.Fatalf("tapview: encode: %v", err)
+				}
+			} else {
+				b, _ := json.MarshalIndent(sess, "", "  ")
+				if err := os.WriteFile(*out, b, 0o644); err != nil {
+					log.Fatalf("tapview: write %s: %v", *out, err)
+				}
+				fmt.Printf("wrote %s\n", *out)
 			}
-			fmt.Printf("wrote %s\n", *out)
 		}
 		if *noSrv {
 			return

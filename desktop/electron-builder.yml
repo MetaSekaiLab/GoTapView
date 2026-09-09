@@ -1,0 +1,36 @@
+appId: io.gotapview.viewer
+productName: GoTapView
+copyright: GoTapView
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**
+  - dist-electron/**
+
+# The Go decoder ships alongside the app, outside the asar, so the main process
+# can spawn it.
+extraResources:
+  - from: resources/tapview
+    to: tapview
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Unsigned (ad-hoc) — first launch: right-click → Open, or clear quarantine.
+  identity: null
+  icon: build/icon.png
+  minimumSystemVersion: "11.0"
+  extendInfo:
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: GoTapline capture
+        CFBundleTypeExtensions: [tap]
+        CFBundleTypeRole: Viewer
+        LSHandlerRank: Alternate
+
+dmg:
+  title: GoTapView

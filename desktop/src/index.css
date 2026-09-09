@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by data-theme on <html>, not the OS media query, so the
+   in-app toggle wins in both directions. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Semantic palette as CSS variables (ported from the old theme tokens). Each
+   colour is stored as an "R G B" triplet so Tailwind's alpha syntax works:
+   bg-surface/50 → rgb(var(--surface) / 0.5). Light values on :root, dark values
+   overridden under [data-theme="dark"]. */
+:root {
+  --bg: 246 247 249;
+  --surface: 255 255 255;
+  --surface-alt: 238 240 243;
+  --border: 216 220 225;
+  --text: 27 31 36;
+  --dim: 97 107 120;
+  --accent: 124 58 237;
+  --accent-text: 255 255 255;
+  --http: 29 111 224;
+  --c2s: 15 157 120;
+  --s2c: 46 139 79;
+  --ctrl: 138 146 158;
+  --warn: 181 113 15;
+  --bad: 209 59 59;
+  --key: 154 111 0;
+  --room: 29 111 224;
+  --player: 15 157 120;
+  --syn-str: 10 125 51;
+  --syn-num: 29 111 224;
+  --syn-bool: 181 113 15;
+  --syn-null: 138 146 158;
+  --syn-tag: 154 111 0;
+  --syn-key: 124 58 237;
+  --mono: 43 47 54;
+}
+
+[data-theme="dark"] {
+  --bg: 15 18 22;
+  --surface: 23 27 33;
+  --surface-alt: 29 34 42;
+  --border: 42 49 59;
+  --text: 230 233 238;
+  --dim: 139 149 163;
+  --accent: 163 113 247;
+  --accent-text: 255 255 255;
+  --http: 74 163 255;
+  --c2s: 67 197 158;
+  --s2c: 126 231 135;
+  --ctrl: 107 116 130;
+  --warn: 240 160 75;
+  --bad: 255 107 107;
+  --key: 227 179 65;
+  --room: 74 163 255;
+  --player: 67 197 158;
+  --syn-str: 126 231 135;
+  --syn-num: 74 163 255;
+  --syn-bool: 240 160 75;
+  --syn-null: 139 149 163;
+  --syn-tag: 227 179 65;
+  --syn-key: 163 113 247;
+  --mono: 201 209 217;
+}
+
+/* Map the variables to Tailwind theme colours so utilities like bg-surface,
+   text-dim, border-border work, with alpha support via the /NN modifier. */
+@theme inline {
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-surface-alt: rgb(var(--surface-alt));
+  --color-border: rgb(var(--border));
+  --color-text: rgb(var(--text));
+  --color-dim: rgb(var(--dim));
+  --color-accent: rgb(var(--accent));
+  --color-accent-text: rgb(var(--accent-text));
+  --color-http: rgb(var(--http));
+  --color-c2s: rgb(var(--c2s));
+  --color-s2c: rgb(var(--s2c));
+  --color-ctrl: rgb(var(--ctrl));
+  --color-warn: rgb(var(--warn));
+  --color-bad: rgb(var(--bad));
+  --color-key: rgb(var(--key));
+  --color-room: rgb(var(--room));
+  --color-player: rgb(var(--player));
+  --color-syn-str: rgb(var(--syn-str));
+  --color-syn-num: rgb(var(--syn-num));
+  --color-syn-bool: rgb(var(--syn-bool));
+  --color-syn-null: rgb(var(--syn-null));
+  --color-syn-tag: rgb(var(--syn-tag));
+  --color-syn-key: rgb(var(--syn-key));
+  --color-mono: rgb(var(--mono));
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+/* Thin, unobtrusive scrollbars. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--dim) / 0.4);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--dim) / 0.65); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+::selection { background: rgb(var(--accent) / 0.35); }
+
+button { cursor: pointer; font: inherit; }
+:focus-visible { outline: 2px solid rgb(var(--accent) / 0.7); outline-offset: 2px; }
