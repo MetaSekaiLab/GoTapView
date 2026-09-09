@@ -134,7 +134,9 @@ export function AppShell() {
       const up = ev.key === "ArrowUp" || ev.key === "k";
       if ((!down && !up) || displayed.length === 0) return;
       ev.preventDefault();
-      const cur = selected ? displayed.findIndex((e) => e.seq === selected.seq) : -1;
+      // Identify the current row by reference, not seq: coalesced datagrams
+      // share a seq, so seq-based lookup sticks on the first of a group.
+      const cur = selected ? displayed.indexOf(selected) : -1;
       const next = cur < 0 ? (down ? 0 : displayed.length - 1) : down ? Math.min(displayed.length - 1, cur + 1) : Math.max(0, cur - 1);
       setSelected(displayed[next]);
       listRef.current?.scrollToDisplayIndex(next);
@@ -151,7 +153,7 @@ export function AppShell() {
           sections={sections}
           groupMode={group}
           t0={t0}
-          selectedSeq={selected?.seq ?? null}
+          selected={selected}
           query={filter.text}
           onSelect={onSelect}
           onViewport={setViewport}

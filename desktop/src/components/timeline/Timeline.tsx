@@ -22,14 +22,14 @@ interface Props {
   sections: GroupSection[];
   groupMode: GroupMode;
   t0: number;
-  selectedSeq: number | null;
+  selected: TapEvent | null;
   query: string;
   onSelect: (e: TapEvent) => void;
   onViewport: (v: Viewport) => void;
 }
 
 export const Timeline = forwardRef<TimelineHandle, Props>(function Timeline(
-  { sections, groupMode, t0, selectedSeq, query, onSelect, onViewport },
+  { sections, groupMode, t0, selected, query, onSelect, onViewport },
   ref,
 ) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -94,7 +94,7 @@ export const Timeline = forwardRef<TimelineHandle, Props>(function Timeline(
                   <TimelineRow
                     e={item.e}
                     t0={t0}
-                    selected={item.e.seq === selectedSeq}
+                    selected={item.e === selected}
                     query={query}
                     onClick={() => onSelect(item.e)}
                   />
