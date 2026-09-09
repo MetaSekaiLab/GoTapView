@@ -23,20 +23,15 @@ export function Header({
 }) {
   const { mode, cycleMode } = useTheme();
   return (
-    <div
-      className="flex items-center gap-3 border-b border-border bg-surface py-2 pr-3 pl-20"
-      style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-    >
-      <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties} className="flex items-center gap-3">
-        <button
-          onClick={onHome}
-          aria-label="Home"
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-alt"
-        >
-          <span className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
-          <span className="text-base font-extrabold tracking-tight text-text">GoTapView</span>
-        </button>
-      </div>
+    <div className="flex items-center gap-3 border-b border-border bg-surface px-3 py-2">
+      <button
+        onClick={onHome}
+        aria-label="Home"
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-alt"
+      >
+        <span className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
+        <span className="text-base font-extrabold tracking-tight text-text">GoTapView</span>
+      </button>
       {session && (
         <span className="min-w-0 flex-shrink truncate font-mono text-xs text-dim">
           {session.meta.file} · {counts.http} http · {counts.udp} udp · {session.meta.diarkisKeys} key
@@ -45,7 +40,7 @@ export function Header({
         </span>
       )}
       <div className="flex-1" />
-      <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties} className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <Button label="Open capture…" onClick={onOpen} variant="subtle" />
         <Button label="Reload" onClick={onReload} variant="primary" />
         <button

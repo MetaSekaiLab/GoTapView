@@ -47,9 +47,8 @@ function createWindow() {
     minHeight: 480,
     title: "GoTapView",
     backgroundColor: "#0f1216",
-    titleBarStyle: "hiddenInset",
     webPreferences: {
-      preload: path.join(__dirname, "preload.mjs"),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

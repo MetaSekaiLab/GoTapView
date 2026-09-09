@@ -13,7 +13,19 @@ export default defineConfig({
     tailwindcss(),
     electron({
       main: { entry: "electron/main.ts" },
-      preload: { input: "electron/preload.ts" },
+      preload: {
+        input: "electron/preload.ts",
+        // The plugin emits CommonJS (require) content; give it a .cjs name so
+        // Electron loads it as CJS. A .mjs name makes Electron treat require as
+        // ESM → "require is not defined" → the bridge never installs.
+        vite: {
+          build: {
+            rollupOptions: {
+              output: { format: "cjs", entryFileNames: "preload.cjs" },
+            },
+          },
+        },
+      },
       renderer: {},
     }),
   ],
