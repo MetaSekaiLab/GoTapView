@@ -4,11 +4,14 @@ import { useTheme } from "../theme";
 import { ThemeMode } from "../theme";
 import { Session } from "../types";
 import { isEmbedded } from "../api";
+import { Button } from "./primitives";
 
 const MODE_ICON: Record<ThemeMode, string> = { system: "◐", light: "☀", dark: "☾" };
+const MODE_LABEL: Record<ThemeMode, string> = { system: "System theme", light: "Light theme", dark: "Dark theme" };
 
-// Header is the top bar: app identity + session summary, the capture controls
-// (Choose/Reload or the remote address box), and the theme toggle.
+// Header is the top bar: a clickable brand (returns to the session overview),
+// the session summary, the capture controls (Choose/Reload or a remote address),
+// and the theme toggle.
 export function Header({
   session,
   counts,
@@ -16,6 +19,7 @@ export function Header({
   setBase,
   onLoad,
   onChoose,
+  onHome,
 }: {
   session: Session | null;
   counts: { http: number; udp: number };
@@ -23,6 +27,7 @@ export function Header({
   setBase: (b: string) => void;
   onLoad: () => void;
   onChoose: () => void;
+  onHome: () => void;
 }) {
   const { theme, mode, cycleMode } = useTheme();
   return (
@@ -32,13 +37,31 @@ export function Header({
         alignItems: "center",
         gap: 12,
         paddingHorizontal: 12,
-        paddingVertical: 10,
+        paddingVertical: 9,
         backgroundColor: theme.surface,
         borderBottomWidth: 1,
         borderBottomColor: theme.border,
       }}
     >
-      <Text style={{ color: theme.text, fontSize: 17, fontWeight: "800" }}>GoTapView</Text>
+      <Pressable onPress={onHome} accessibilityRole="button" accessibilityLabel="Home">
+        {({ hovered }: any) => (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 7,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 8,
+              backgroundColor: hovered ? theme.surfaceAlt : "transparent",
+            }}
+          >
+            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: theme.accent }} />
+            <Text style={{ color: theme.text, fontSize: 16, fontWeight: "800", letterSpacing: 0.2 }}>GoTapView</Text>
+          </View>
+        )}
+      </Pressable>
+
       {session && (
         <Text style={{ color: theme.dim, fontSize: 12, fontFamily: theme.monoFont, flexShrink: 1 }} numberOfLines={1}>
           {session.meta.file} · {counts.http} http · {counts.udp} udp · {session.meta.diarkisKeys} key
@@ -62,33 +85,37 @@ export function Header({
             width: 200,
             backgroundColor: theme.surfaceAlt,
             color: theme.text,
-            borderRadius: 6,
+            borderRadius: 7,
             paddingHorizontal: 10,
-            paddingVertical: 6,
+            paddingVertical: 7,
             fontSize: 12,
             fontFamily: theme.monoFont,
+            borderWidth: 1,
+            borderColor: theme.border,
           }}
         />
       )}
-      {isEmbedded && (
-        <Pressable onPress={onChoose} style={btn(theme.surfaceAlt)}>
-          <Text style={{ color: theme.text, fontWeight: "700", fontSize: 12 }}>Choose capture…</Text>
-        </Pressable>
-      )}
-      <Pressable onPress={onLoad} style={btn(theme.accent)}>
-        <Text style={{ color: theme.accentText, fontWeight: "700", fontSize: 12 }}>{isEmbedded ? "Reload" : "Load"}</Text>
-      </Pressable>
-      <Pressable onPress={cycleMode} style={[btn(theme.surfaceAlt), { paddingHorizontal: 10 }]} accessibilityLabel={`theme: ${mode}`}>
-        <Text style={{ color: theme.text, fontSize: 14 }}>{MODE_ICON[mode]}</Text>
+      {isEmbedded && <Button label="Choose capture…" onPress={onChoose} variant="subtle" />}
+      <Button label={isEmbedded ? "Reload" : "Load"} onPress={onLoad} variant="primary" />
+      <Pressable onPress={cycleMode} accessibilityRole="button" accessibilityLabel={MODE_LABEL[mode]}>
+        {({ hovered }: any) => (
+          <Text
+            style={{
+              color: theme.text,
+              fontSize: 15,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 7,
+              borderWidth: 1,
+              borderColor: theme.border,
+              backgroundColor: hovered ? theme.border : theme.surfaceAlt,
+              overflow: "hidden",
+            }}
+          >
+            {MODE_ICON[mode]}
+          </Text>
+        )}
       </Pressable>
     </View>
   );
 }
-
-const btn = (bg: string) => ({
-  backgroundColor: bg,
-  borderRadius: 6,
-  paddingHorizontal: 12,
-  paddingVertical: 7,
-  justifyContent: "center" as const,
-});

@@ -58,6 +58,7 @@ export function Minimap({
     <Pressable
       onPress={seek}
       onLayout={onLayout}
+      accessibilityRole="button"
       style={{
         width: 46,
         alignSelf: "stretch",

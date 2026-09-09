@@ -74,7 +74,7 @@ export function JsonNode({
 
   return (
     <View>
-      <Pressable onPress={() => setOpen((o) => !o)}>
+      <Pressable onPress={() => setOpen((o) => !o)} accessibilityRole="button">
         <Text style={[mono, { color: theme.dim }]}>
           <Text style={{ color: theme.dim }}>{open ? "▾ " : "▸ "}</Text>
           {name !== undefined && <Text style={{ color: theme.syntax.key }}>{name}: </Text>}

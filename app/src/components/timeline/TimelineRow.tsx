@@ -36,7 +36,7 @@ function RowImpl({
   const msgType = e.udp ? eventMsgType(e) : null;
 
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} accessibilityRole="button">
       {({ hovered }: any) => (
         <View
           style={{

@@ -41,5 +41,9 @@ export function Chip({
     </View>
   );
   if (!onPress) return body(false);
-  return <Pressable onPress={onPress}>{({ hovered }: any) => body(!!hovered)}</Pressable>;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button">
+      {({ hovered }: any) => body(!!hovered)}
+    </Pressable>
+  );
 }

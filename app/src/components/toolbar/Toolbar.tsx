@@ -44,6 +44,7 @@ export function Toolbar({
             return (
               <Pressable
                 key={t}
+                accessibilityRole="button"
                 onPress={() => setKind(t)}
                 style={{
                   paddingVertical: 5,
@@ -89,6 +90,7 @@ export function Toolbar({
         />
 
         <Pressable
+          accessibilityRole="button"
           onPress={() => setExpanded((x) => !x)}
           style={{
             paddingVertical: 6,
@@ -112,7 +114,7 @@ export function Toolbar({
           <FacetSelect title="Command" values={facets.cmds} selected={filter.cmds} tone={theme.lane.udpC2S} onToggle={(v) => toggle("cmds", v)} />
           <FacetSelect title="Message" values={facets.msgTypes} selected={filter.msgTypes} tone={theme.accent} onToggle={(v) => toggle("msgTypes", v)} />
           {active > 0 && (
-            <Pressable onPress={() => setFilter({ ...filter, flows: new Set(), dirs: new Set(), cmds: new Set(), msgTypes: new Set(), kind: "all", text: "" })} style={{ alignSelf: "flex-start", marginTop: 4 }}>
+            <Pressable accessibilityRole="button" onPress={() => setFilter({ ...filter, flows: new Set(), dirs: new Set(), cmds: new Set(), msgTypes: new Set(), kind: "all", text: "" })} style={{ alignSelf: "flex-start", marginTop: 4 }}>
               <Text style={{ color: theme.accent, fontSize: 12 }}>Clear all filters</Text>
             </Pressable>
           )}
@@ -139,6 +141,7 @@ function Segmented({
         return (
           <Pressable
             key={v}
+            accessibilityRole="button"
             onPress={() => onChange(v)}
             style={{
               paddingVertical: 6,

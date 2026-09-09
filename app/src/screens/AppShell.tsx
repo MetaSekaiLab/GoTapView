@@ -96,6 +96,10 @@ export function AppShell() {
   const t0 = session?.meta.startedWall ?? 0;
 
   const onSelect = useCallback((e: TapEvent) => setSelected(e), []);
+  const onHome = useCallback(() => {
+    setSelected(null);
+    listRef.current?.scrollToFlatIndex(0);
+  }, []);
 
   // Keyboard navigation: ↑/↓ (or k/j) step the selection through the filtered
   // list and scroll it into view; Esc closes the detail. A single window
@@ -206,7 +210,7 @@ export function AppShell() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar barStyle={resolved === "dark" ? "light-content" : "dark-content"} />
-      <Header session={session} counts={counts} base={base} setBase={setBase} onLoad={load} onChoose={choose} />
+      <Header session={session} counts={counts} base={base} setBase={setBase} onLoad={load} onChoose={choose} onHome={onHome} />
       {session && <Toolbar filter={filter} setFilter={setFilter} facets={facets} counts={counts} group={group} setGroup={changeGroup} />}
       {body()}
     </SafeAreaView>

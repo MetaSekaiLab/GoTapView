@@ -37,7 +37,7 @@ export function DetailPane({
           {event ? "Event detail" : "Session overview"}
         </Text>
         {event && (showClose ?? true) && onClear && (
-          <Pressable onPress={onClear}>
+          <Pressable onPress={onClear} accessibilityRole="button">
             <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "700" }}>✕</Text>
           </Pressable>
         )}
