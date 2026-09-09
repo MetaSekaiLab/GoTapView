@@ -97,6 +97,41 @@ export function AppShell() {
 
   const onSelect = useCallback((e: TapEvent) => setSelected(e), []);
 
+  // Keyboard navigation: ↑/↓ (or k/j) step the selection through the filtered
+  // list and scroll it into view; Esc closes the detail. A single window
+  // listener reads the latest filtered/selected via a ref so it never restages.
+  const navRef = useRef({ filtered, selected });
+  navRef.current = { filtered, selected };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onKey = (ev: KeyboardEvent) => {
+      const { filtered, selected } = navRef.current;
+      // Don't hijack keys while typing in the filter box or address field.
+      const el = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+
+      if (ev.key === "Escape") {
+        if (selected) {
+          setSelected(null);
+          ev.preventDefault();
+        }
+        return;
+      }
+      const down = ev.key === "ArrowDown" || ev.key === "j";
+      const up = ev.key === "ArrowUp" || ev.key === "k";
+      if ((!down && !up) || filtered.length === 0) return;
+      ev.preventDefault();
+      const cur = selected ? filtered.findIndex((e) => e.seq === selected.seq) : -1;
+      let next: number;
+      if (cur < 0) next = down ? 0 : filtered.length - 1;
+      else next = down ? Math.min(filtered.length - 1, cur + 1) : Math.max(0, cur - 1);
+      setSelected(filtered[next]);
+      listRef.current?.scrollToFlatIndex(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const timeline = (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: theme.bg }}>
       <View style={{ flex: 1 }}>
