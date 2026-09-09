@@ -1,6 +1,6 @@
 {
   "name": "gotapview-desktop",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "GoTapView — .tap capture viewer (Electron)",
   "private": true,
   "type": "module",

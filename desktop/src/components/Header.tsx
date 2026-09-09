@@ -22,11 +22,20 @@ export function Header({
   onHome: () => void;
 }) {
   const { mode, cycleMode } = useTheme();
+  // The whole bar is a window-drag region; interactive controls opt out so they
+  // stay clickable. The left padding clears the macOS traffic lights, which are
+  // positioned by the main process to sit centred in this 52px bar.
+  const drag = { WebkitAppRegion: "drag" } as React.CSSProperties;
+  const noDrag = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
   return (
-    <div className="flex items-center gap-3 border-b border-border bg-surface px-3 py-2">
+    <div
+      style={drag}
+      className="flex h-[52px] shrink-0 items-center gap-3 border-b border-border bg-surface pr-3 pl-[84px]"
+    >
       <button
         onClick={onHome}
         aria-label="Home"
+        style={noDrag}
         className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-alt"
       >
         <span className="h-2.5 w-2.5 rounded-[3px] bg-accent" />
@@ -40,7 +49,7 @@ export function Header({
         </span>
       )}
       <div className="flex-1" />
-      <div className="flex items-center gap-2">
+      <div style={noDrag} className="flex items-center gap-2">
         <Button label="Open capture…" onClick={onOpen} variant="subtle" />
         <Button label="Reload" onClick={onReload} variant="primary" />
         <button

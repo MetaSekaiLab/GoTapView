@@ -47,6 +47,11 @@ function createWindow() {
     minHeight: 480,
     title: "GoTapView",
     backgroundColor: "#0f1216",
+    // Immersive title bar: no native title strip, the web content reaches the
+    // top, and the traffic lights are placed to sit centred in the custom
+    // header (HEADER_H = 52 → (52-16)/2 = 18).
+    titleBarStyle: "hidden",
+    trafficLightPosition: { x: 18, y: 18 },
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
