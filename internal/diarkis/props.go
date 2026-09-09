@@ -187,6 +187,7 @@ func renameValues(vals map[string]any, kind string) map[string]any {
 	if m == nil {
 		return vals
 	}
+	schemas := propStructSchema[kind]
 	out := make(map[string]any, len(vals))
 	for k, val := range vals {
 		name := k
@@ -194,6 +195,11 @@ func renameValues(vals map[string]any, kind string) map[string]any {
 			if meta, ok := m[id]; ok {
 				name = meta.name
 			}
+		}
+		// OBJECT-typed properties (e.g. BASIC_INFO) carry a positional msgpack
+		// array; give its fields their real names from the il2cpp struct.
+		if schema, ok := schemas[name]; ok {
+			val = labelObjectProperty(schema, val)
 		}
 		out[name] = val
 	}
