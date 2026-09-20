@@ -290,8 +290,26 @@ func decodeBody(m *httpx.Message, jsonOut *any, textOut, hexOut *string) {
 	ct := m.Header("content-type")
 	body := m.Body
 	if strings.Contains(ct, "octet-stream") {
-		if dec, err := apicrypto.Decrypt(body); err == nil {
-			body = dec
+		// The game rotated its API-body key/iv in 6.4.0 and uses a second pair
+		// for AssetBundle-info. Try every known pair against the original
+		// ciphertext and keep the one whose plaintext fully MessagePack-decodes,
+		// so captures from any game version (and both body kinds) are readable.
+		var fallback []byte
+		for _, kp := range apicrypto.Candidates {
+			dec, err := apicrypto.DecryptWith(body, kp.Key, kp.IV)
+			if err != nil {
+				continue
+			}
+			if v, n, e := mpjson.DecodeAll(dec); e == nil && n == len(dec) {
+				*jsonOut = v
+				return
+			}
+			if fallback == nil {
+				fallback = dec // first plausible decrypt, for the text/hex fallback
+			}
+		}
+		if fallback != nil {
+			body = fallback
 		}
 	}
 	if v, n, err := mpjson.DecodeAll(body); err == nil && n == len(body) {

@@ -92,9 +92,16 @@ func SplitDatagrams(b []byte, respHeader bool) [][]byte {
 			}
 			break
 		}
-		// bare control unit: 4-byte wrapper + optional 16-byte sid
+		// bare control unit: 4-byte wrapper + optional 16-byte sid.
+		//
+		// The bound has to cover the flag byte being read, not just the unit
+		// before it: a 21-to-23-byte payload is longer than one ACK but too
+		// short to hold the next wrapper, and indexing it panics. A flow is
+		// classified as Diarkis if any one of its datagrams carries the frame
+		// magic, so every datagram in that flow reaches here -- including a
+		// short or truncated one.
 		const ackUnit = 4 + 16
-		if len(b) > ackUnit && b[ackUnit+3] >= 1 && b[ackUnit+3] <= 7 {
+		if len(b) > ackUnit+3 && b[ackUnit+3] >= 1 && b[ackUnit+3] <= 7 {
 			out = append(out, b[:ackUnit])
 			b = b[ackUnit:]
 			continue
